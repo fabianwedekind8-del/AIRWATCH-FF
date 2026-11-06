@@ -8,15 +8,241 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title> Flugradar FF</title>
+    <title>AIRWATCH FF – Live-Flugradar</title>
+
+    <link rel="stylesheet"
+
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+    <style>
+
+        body {
+
+            margin: 0;
+
+            background: #101820;
+
+            color: white;
+
+            font-family: Arial, sans-serif;
+
+        }
+
+        header {
+
+            padding: 18px;
+
+            background: #172b3a;
+
+            text-align: center;
+
+        }
+
+        h1 {
+
+            margin: 0;
+
+            color: #45d7ff;
+
+        }
+
+        #status {
+
+            padding: 12px;
+
+            text-align: center;
+
+            font-size: 14px;
+
+        }
+
+        #map {
+
+            height: 70vh;
+
+            min-height: 400px;
+
+            width: 100%;
+
+        }
+
+        footer {
+
+            padding: 12px;
+
+            text-align: center;
+
+            font-size: 12px;
+
+            color: #aaa;
+
+        }
+
+    </style>
 
 </head>
 
 <body>
 
-    <h1> Flugradar FF</h1>
+<header>
 
-    <p>Flugüberwachung ist aktiv.</p>
+    <h1>AIRWATCH FF</h1>
+
+    <p>Live-Flugradar</p>
+
+</header>
+
+<div id="status">Flugdaten werden geladen ...</div>
+
+<div id="map"></div>
+
+<footer>
+
+    Flugzeugdaten: adsb.lol · Kartendaten: OpenStreetMap
+
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+
+    const map = L.map('map').setView([50.8, 10.5], 7);
+
+    L.tileLayer(
+
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+
+        {
+
+            attribution: '&copy; OpenStreetMap'
+
+        }
+
+    ).addTo(map);
+
+    const aircraftMarkers = new Map();
+
+    async function loadAircraft() {
+
+        const status = document.getElementById('status');
+
+        try {
+
+            const response = await fetch(
+
+                'https://api.adsb.lol/v2/lat/50.8/lon/10.5/dist/100'
+
+            );
+
+            if (!response.ok) {
+
+                throw new Error('Flugdaten nicht erreichbar');
+
+            }
+
+            const data = await response.json();
+
+            const aircraft = data.ac || [];
+
+            const seen = new Set();
+
+            aircraft.forEach(plane => {
+
+                if (
+
+                    typeof plane.lat !== 'number' ||
+
+                    typeof plane.lon !== 'number'
+
+                ) return;
+
+                const id = plane.hex;
+
+                if (!id) return;
+
+                seen.add(id);
+
+                const popup = `
+
+                    <b>${plane.flight || 'Unbekannter Flug'}</b><br>
+
+                    Typ: ${plane.t || 'Unbekannt'}<br>
+
+                    Höhe: ${plane.alt_baro ?? 'Unbekannt'} ft<br>
+
+                    Geschwindigkeit: ${plane.gs ?? 'Unbekannt'} kt<br>
+
+                    Kennung: ${id}
+
+                `;
+
+                const marker = aircraftMarkers.get(id);
+
+                if (marker) {
+
+                    marker.setLatLng([plane.lat, plane.lon]);
+
+                    marker.setPopupContent(popup);
+
+                } else {
+
+                    const newMarker = L.circleMarker(
+
+                        [plane.lat, plane.lon],
+
+                        {
+
+                            radius: 7,
+
+                            color: '#45d7ff',
+
+                            fillColor: '#168cff',
+
+                            fillOpacity: 0.9
+
+                        }
+
+                    ).addTo(map);
+
+                    newMarker.bindPopup(popup);
+
+                    aircraftMarkers.set(id, newMarker);
+
+                }
+
+            });
+
+            for (const [id, marker] of aircraftMarkers) {
+
+                if (!seen.has(id)) {
+
+                    map.removeLayer(marker);
+
+                    aircraftMarkers.delete(id);
+
+                }
+
+            }
+
+            status.textContent =
+
+                `LIVE – ${aircraftMarkers.size} Flugzeuge im erfassten Gebiet`;
+
+        } catch (error) {
+
+            status.textContent =
+
+                'Flugdaten momentan nicht verfügbar. Neuer Versuch folgt.';
+
+        }
+
+    }
+
+    loadAircraft();
+
+    setInterval(loadAircraft, 15000);
+
+</script>
 
 </body>
 
